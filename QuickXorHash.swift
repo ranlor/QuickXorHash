@@ -209,7 +209,7 @@ struct QuickXorHash
     // position
     //
     // finally to get the final block we only need to xor the 8 groups we created and we're done, all the
-    // bytes in the 160 byte block are xored in their correct potision
+    // bytes in the 160 byte block are xored in their correct position
     static private func xorHash0(_ fileBytes:Data,fileBytesLen:Int, blockSize:Int) -> [UInt8]
     {
         let bytesPerBlockUnit = blockSize * BITS_IN_BYTE
