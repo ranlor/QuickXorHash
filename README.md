@@ -181,5 +181,5 @@ from a few benchmarks i did this code will get ~600milisec per ~100MB which was 
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
