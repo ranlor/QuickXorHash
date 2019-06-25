@@ -206,7 +206,7 @@ struct QuickXorHash
     // to approuch this we first notice that each byte in the 160 byte block could only be shifted
     // between 0 to 7 bits to the left (if there was a byte that shifted more than 7 bits then it would
     // have been xored with other bytes when we read the file, that is due to the fact that 11 is a generator
-    // of group Z160 { 11 * i | i in N} = Z160)
+    // of group Z160 { 11 * i mod 160 | i in N} = Z160)
     //
     // since we know that each byte has a 0..7 bits to be shifted and each byte has it own unique position
     // in the 160 byte block (since 11 is a generator) we can group each byte according to how many bits
