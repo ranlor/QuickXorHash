@@ -5,6 +5,7 @@ struct QuickXorHash
 {
     static private let BLOCK_LEN:Int = 20
     static private let BITS_IN_BYTE:Int = 8
+    static private let SHIFT_BITS:Int = 11
     static private let INT64_BYTES_LEN = MemoryLayout<UInt64>.size
 
     // returns a block with all zero bits.
@@ -138,20 +139,15 @@ struct QuickXorHash
         //init for reading the file in 8 byte chunks (UInt64) at the time
         let blockLength = bytesPerBlockUnit / INT64_BYTES_LEN
         
-        // the mask of bytes we need to zero out in the last 8 byte chunk (UInt64) we read
-        let zeroOutBytesCount = (INT64_BYTES_LEN - (fileBytesLen % INT64_BYTES_LEN)) % INT64_BYTES_LEN
-        let zeroOutMask:UInt64 = UInt64.max >> (zeroOutBytesCount * BITS_IN_BYTE)
-        
         let fileData = NSData(data: fileBytes).bytes.assumingMemoryBound(to: UInt64.self)
         
-        let fileLength8ByteChunks = (fileBytesLen / INT64_BYTES_LEN) + (fileBytesLen % INT64_BYTES_LEN == 0 ? 0 : 1)
-        
-        
+        let fileLength8ByteChunks = (fileBytesLen / INT64_BYTES_LEN)
         
         var hashedFile:[UInt64] = zeroUInt64(blockLength)
-        let iterations = (fileLength8ByteChunks / blockLength)
+        let numberOfFullUnitBlockInFile = (fileLength8ByteChunks / blockLength)
+        let numberOfUInt64InLastBlock = (fileLength8ByteChunks % blockLength) + ( (fileBytesLen % INT64_BYTES_LEN) != 0 ? 1 : 0 )
         // xor all blocks of 160 bytes from the file, 8 byte (UInt64) chunks at a time
-        for i in 0..<iterations
+        for i in 0..<numberOfFullUnitBlockInFile
         {
             let indexOffset = i*blockLength
             // instead of copying 160 bytes to an array and xoring them with hashedFile, we take a pointer to the file data
@@ -160,24 +156,37 @@ struct QuickXorHash
         }
         
         // if the end of the file have less than 160 bytes (20 chunks of 8 bytes), read the left
-        // over bytes, and if needed zero out bytes in the 8 byte chunk (i.e. if the length of the
-        // file isn't divisible by 8 bytes we might read junk)
+        // over bytes, and if needed read the last 8 bytes byte-by-byte inorder to not exceed the
+        // size of the file
         
-        if fileLength8ByteChunks % blockLength != 0
+        if (numberOfUInt64InLastBlock != 0)
         {
             var fileBlock = zeroUInt64(blockLength)
-            let int64IndexOffset = iterations*blockLength
-            let fileBlockEffectiveSize = fileLength8ByteChunks - int64IndexOffset
+            let int64IndexOffset = numberOfFullUnitBlockInFile * blockLength
             
-            // copy all the 8 byte chunks to a temporary array
-            for j in 0..<fileBlockEffectiveSize
+            // copy all the 8 byte chunks to a temporary array except the last 8 bytes
+            for j in 0..<numberOfUInt64InLastBlock-1
             {
                 let boffset = fileData + (int64IndexOffset + j)
                 fileBlock[j] = boffset.pointee
             }
             
-            // zero out any bytes we read past the end of the file (inside an 8 byte chunk) if any
-            fileBlock[fileBlockEffectiveSize-1] = fileBlock[fileBlockEffectiveSize-1] & zeroOutMask
+            // read the last 8 bytes - byte by byte
+            let fileBlockOffset = numberOfUInt64InLastBlock-1
+            let lastUInt64Offset = int64IndexOffset + fileBlockOffset
+            let lastBytesOffset = lastUInt64Offset * INT64_BYTES_LEN
+            let lastBytesData = fileBytes.subdata(in: lastBytesOffset..<fileBytes.count)
+            
+            var lastUInt64:UInt64 = 0
+            
+            // merge all available bytes to UInt64
+            for j in 0..<lastBytesData.count
+            {
+                let byteToUInt64 = ( UInt64(lastBytesData[j]) ) << (j * BITS_IN_BYTE)
+                lastUInt64 = lastUInt64 | byteToUInt64
+            }
+            // add the last UInt64 to the block
+            fileBlock[ fileBlockOffset ] = lastUInt64
             
             // xor the last block from the file
             xor(&hashedFile,otherBlock: fileBlock)
@@ -223,7 +232,7 @@ struct QuickXorHash
         var blocksToHash:[[UInt8]] = Array(repeating: Array(repeating: 0, count: blockSize), count: 8)
         for i in 0..<bytesPerBlockUnit
         {
-            let originalBytePos = (i * 11) % bytesPerBlockUnit
+            let originalBytePos = (i * SHIFT_BITS) % bytesPerBlockUnit
             let missalignedBits = originalBytePos % BITS_IN_BYTE
             let byteAlignIndex = originalBytePos / BITS_IN_BYTE
             blocksToHash[missalignedBits][byteAlignIndex] = hashedByteBlock[i]
@@ -254,7 +263,7 @@ struct QuickXorHash
         guard let fileData = try? Data(contentsOf: fileURL) else {
             return zeroUInt8(BLOCK_SIZE)
         }
-        
+
         return xorHash(fileData, fileBytesLen:fileData.count ,blockSize: BLOCK_SIZE)
     }
 }
